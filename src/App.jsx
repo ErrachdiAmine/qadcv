@@ -3,8 +3,8 @@ import './App.css';
 import { enhanceCVWithAI, generateSummary, enhanceExperienceDescription, suggestSkills, generateCoverLetter } from './services/ai.js';
 import { categorizeSkills, getSkillGaps, getRecommendedSkills } from './utils/skills.js';
 import { matchJobToCV, saveApplication, getApplications, generateApplicationMaterials, updateApplicationStatus } from './utils/jobs.js';
-import { saveVersion, getVersions, restoreVersion, deleteVersion, getVersionStats, autoSaveVersion } from './utils/versions.js';
-import { analyzeResume, generateImprovementPlan, generateInterviewQuestions, generateSalaryInsights, generateNetworkingTips } from './utils/analytics.js';
+import { saveVersion, getVersions, restoreVersion, deleteVersion, getVersionStats, getVersionDiff, getChangesSummary, cleanupVersions } from './utils/versions.js';
+// import { analyzeResume, generateImprovementPlan, generateInterviewQuestions, generateSalaryInsights, generateNetworkingTips } from './utils/analytics.js';
 
 const STORAGE_KEY = 'cv-generator-data';
 const API_BASE = 'http://localhost:8001/api';
@@ -128,7 +128,7 @@ function App() {
   const [improvementPlan, setImprovementPlan] = useState(null);
   const [interviewQuestions, setInterviewQuestions] = useState(null);
   const [salaryInsights, setSalaryInsights] = useState(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
+  // const [networkingTips, setNetworkingTips] = useState(null);
   const [cvId, setCvId] = useState(null);
   const [synced, setSynced] = useState(false);
 
@@ -139,9 +139,6 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
-    setAutoSaveStatus('saving...');
-    setTimeout(() => setAutoSaveStatus('saved'), 1000);
-    if (autoSaveVersion(formData)) setVersions(getVersions());
   }, [formData]);
 
   useEffect(() => {
@@ -412,7 +409,7 @@ function App() {
     <div key={index} className="form-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h4>Position #{index + 1}</h4>
-        <button type="button" onClick={() => removeArrayItem('experience', index)} className="btn-icon">Remove</button>
+        <button type="button" onClick={() => removeArrayItem('experience', index)} className="btn-secondary remove-btn">Remove</button>
       </div>
       <div className="form-row">
         <div><label>Company</label><input type="text" value={exp.company || ''} onChange={(e) => handleArrayChange('experience', index, 'company', e.target.value)} placeholder="Company name" /></div>
@@ -431,7 +428,7 @@ function App() {
     <div key={index} className="form-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h4>Education #{index + 1}</h4>
-        <button type="button" onClick={() => removeArrayItem('education', index)} className="btn-icon">Remove</button>
+        <button type="button" onClick={() => removeArrayItem('education', index)} className="btn-secondary remove-btn">Remove</button>
       </div>
       <div className="form-row">
         <div><label>Institution</label><input type="text" value={edu.institution || ''} onChange={(e) => handleArrayChange('education', index, 'institution', e.target.value)} placeholder="University name" /></div>
@@ -452,7 +449,7 @@ function App() {
     <div key={index} className="form-section" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
       <input type="text" value={lang.name || ''} onChange={(e) => handleArrayChange('languages', index, 'name', e.target.value)} placeholder="Language" style={{ flex: 1, minWidth: '150px' }} />
       <input type="text" value={lang.proficiency || ''} onChange={(e) => handleArrayChange('languages', index, 'proficiency', e.target.value)} placeholder="Proficiency (e.g., Native, Fluent, Professional)" style={{ flex: 1, minWidth: '150px' }} />
-      <button type="button" onClick={() => removeArrayItem('languages', index)} className="btn-icon" style={{ alignSelf: 'flex-end' }}>Remove</button>
+      <button type="button" onClick={() => removeArrayItem('languages', index)} className="btn-secondary remove-btn" style={{ alignSelf: 'flex-end' }}>Remove</button>
     </div>
   ));
 
@@ -460,7 +457,7 @@ function App() {
     <div key={index} className="form-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h4>Certification #{index + 1}</h4>
-        <button type="button" onClick={() => removeArrayItem('certifications', index)} className="btn-icon">Remove</button>
+        <button type="button" onClick={() => removeArrayItem('certifications', index)} className="btn-secondary remove-btn">Remove</button>
       </div>
       <div className="form-row">
         <div><label>Name</label><input type="text" value={cert.name || ''} onChange={(e) => handleArrayChange('certifications', index, 'name', e.target.value)} placeholder="Certification name" /></div>
@@ -477,7 +474,7 @@ function App() {
     <div key={index} className="form-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h4>Project #{index + 1}</h4>
-        <button type="button" onClick={() => removeArrayItem('projects', index)} className="btn-icon">Remove</button>
+        <button type="button" onClick={() => removeArrayItem('projects', index)} className="btn-secondary remove-btn">Remove</button>
       </div>
       <div className="form-row">
         <div><label>Name</label><input type="text" value={proj.name || ''} onChange={(e) => handleArrayChange('projects', index, 'name', e.target.value)} placeholder="Project name" /></div>
@@ -525,21 +522,27 @@ function App() {
           <div className="app-header-shell">
           <header className="header">
             <div className="header-top">
-              <h1>CV Builder</h1>
-              <button className="btn-secondary template-select-btn" onClick={() => openModal('templateSelect')}>
-                              <svg className="icon" viewBox="0 0 24 24" style={{ width: '18px', height: '18px' }}><use href="/icons/sprite.svg#layout"/></svg>
-                              {templates[selectedTemplate].name}
-                            </button>
+              <div className="header-brand">
+                <h1>QAD CV</h1>
+              </div>
+              <div className="header-controls">
+                <button className="btn-secondary template-select-btn" onClick={() => openModal('templateSelect')}>
+                  <svg className="icon" viewBox="0 0 24 24" style={{ width: '18px', height: '18px' }}><use href="/icons/sprite.svg#layout"/></svg>
+                  {templates[selectedTemplate].name}
+                </button>
+                <button className="btn-icon theme-toggle-btn" onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Light mode' : 'Dark mode'}>
+                  <span className="theme-toggle-track">
+                    <span className="theme-toggle-thumb">{darkMode ? '☀️' : '🌙'}</span>
+                  </span>
+                </button>
+              </div>
             </div>
             <div className="header-actions">
+              <button className="btn-primary mobile-preview-btn" onClick={() => setShowPreview(true)} aria-label="Open preview">Preview</button>
               <button className="btn-primary" onClick={enhanceWithAI} disabled={aiLoading}>{aiLoading ? 'Processing...' : 'Enhance CV'}</button>
-              {/* <button className="btn-secondary" onClick={checkATSScore}>ATS Score</button> */}
-              {/* <button className="btn-secondary" onClick={() => openModal('jobMatch')}>Job Match</button> */}
               <button className="btn-secondary" onClick={() => openModal('applications')}>Applications</button>
               <button className="btn-secondary" onClick={() => openModal('versions')}>Versions</button>
-              <button className="btn-secondary" onClick={() => openModal('analytics')}>Analytics</button>
-              <button className="btn-icon" onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Light mode' : 'Dark mode'}>{darkMode ? '☀️' : '🌙'}</button>
-              <span className="sync-status">{synced ? '✓ Synced' : 'Local only'}</span>
+              {synced && <span className="sync-status">✓ Synced</span>}
               {aiError && <span className="error-toast">{aiError}</span>}
             </div>
           </header>
@@ -695,7 +698,9 @@ function App() {
           <div className="preview-overlay" onClick={() => setShowPreview(false)}>
             <div className="preview-overlay-content" onClick={(e) => e.stopPropagation()}>
               <button className="preview-close-btn" onClick={() => setShowPreview(false)} aria-label="Close preview">Close</button>
-              <div className="preview-overlay-inner" dangerouslySetInnerHTML={{ __html: preview() }} />
+              <div className="preview-overlay-inner">
+                <div className={`preview-page ${exportPageSize === 'Letter' ? 'letter' : ''}`} dangerouslySetInnerHTML={{ __html: preview() }} />
+              </div>
             </div>
           </div>
         )}
@@ -714,7 +719,7 @@ function App() {
                 </div>
                 <div className="export-options-grid" style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
                   <button className="export-option" onClick={exportJSON}><svg className="icon" viewBox="0 0 24 24"><use href="/icons/sprite.svg#download"/></svg><span>Download JSON</span><small>For backup/import</small></button>
-                  <button className="export-option" onClick={exportPDF}><svg className="icon" viewBox="0 0 24 24"><use href="/icons/sprite.svg#print"/></svg><span>Print / Save as PDF</span><small>{`A4 page ${exportPageSize === 'A4' ? 'selected' : 'Letter page selected'}`}</small></button>
+                  <button className="export-option" onClick={exportPDF}><svg className="icon" viewBox="0 0 24 24"><use href="/icons/sprite.svg#print"/></svg><span>Print / Save as PDF</span><small>{`${exportPageSize} page selected`}</small></button>
                 </div>
               </div>
             </div>
@@ -796,20 +801,31 @@ function App() {
         {modals.versions && (
           <div className="modal-overlay" onClick={() => closeModal('versions')}>
             <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header"><h3>Version History</h3><button className="modal-close" onClick={() => closeModal('versions')}>×</button></div>
+              <div className="modal-header">
+                <h3>Version History</h3>
+                <button className="modal-close" onClick={() => closeModal('versions')}>×</button>
+              </div>
               <div className="modal-body">
-                {versions.length === 0 ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No versions yet. Changes are auto-saved.</p> : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
+                  <button className="btn-primary" onClick={() => { saveVersion(formData, `Manual save ${new Date().toLocaleTimeString()}`); setVersions(getVersions()); }}>Save Version</button>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{versions.length} version{versions.length !== 1 ? 's' : ''}</span>
+                </div>
+                {versions.length === 0 ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No saved versions yet. Your draft is stored locally in the browser, so refreshing will keep your current changes.</p> : (
                   <div>
                     {versions.slice().reverse().map(v => (
-                      <div key={v.id || v.version_number} className="version-item" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <strong>v{v.version_number}</strong> {v.label && <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{v.label}</span>}
-                          <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: v.is_auto ? 'var(--brand)' : 'var(--success)', color: 'white' }}>{v.is_auto ? 'AUTO' : 'MANUAL'}</span>
-                          <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(v.created_at || v.timestamp).toLocaleString()}</span>
+                      <div key={v.id || v.version_number} className="version-item" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <strong>v{v.version_number}</strong> 
+                            {v.label && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{v.label}</span>}
+                            <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: v.is_auto ? 'var(--brand)' : 'var(--success)', color: 'white' }}>{v.is_auto ? 'AUTO' : 'MANUAL'}</span>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(v.created_at || v.timestamp).toLocaleString()}</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn-secondary" style={{ width: 'auto', padding: '0.4rem 0.75rem' }} onClick={() => { setSelectedVersion(v); setModals(p => ({ ...p, versions: false })); setTimeout(() => restoreVersion(v), 100); }}>Restore</button>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                  <button className="btn-secondary" style={{ width: 'auto', padding: '0.4rem 0.75rem' }} onClick={() => handleRestoreVersion(v.id)}>Restore</button>
                           <button className="btn-secondary" style={{ width: 'auto', padding: '0.4rem 0.75rem' }} onClick={() => { if (confirm('Delete this version?')) { deleteVersion(v.id); setVersions(getVersions()); } }}>Delete</button>
+                          <button className="btn-secondary" style={{ width: 'auto', padding: '0.4rem 0.75rem' }} onClick={() => { const label = prompt('Enter label for this version:', v.label); if (label) { saveVersion(formData, label); setVersions(getVersions()); } }}>Label</button>
                         </div>
                       </div>
                     ))}
@@ -820,7 +836,7 @@ function App() {
           </div>
         )}
 
-        {modals.analytics && (
+        {/* {modals.analytics && (
           <div className="modal-overlay" onClick={() => closeModal('analytics')}>
             <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header"><h3>Resume Analytics</h3><button className="modal-close" onClick={() => closeModal('analytics')}>×</button></div>
@@ -843,7 +859,7 @@ function App() {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
         {modals.templateSelect && (
           <div className="modal-overlay" onClick={() => closeModal('templateSelect')}>
